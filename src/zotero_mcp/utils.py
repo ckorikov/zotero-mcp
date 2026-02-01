@@ -32,6 +32,16 @@ def is_local_mode() -> bool:
     value = os.getenv("ZOTERO_LOCAL", "")
     return value.lower() in {"true", "yes", "1"}
 
+def is_semantic_search_enabled() -> bool:
+    """Return True if semantic search is enabled.
+
+    Controlled by environment variable `ZOTERO_SEMANTIC_SEARCH`.
+    Enabled by default ("true", "yes", or "1", case-insensitive).
+    """
+    value = os.getenv("ZOTERO_SEMANTIC_SEARCH", "true")
+    return value.lower() in {"true", "yes", "1"}
+
+
 def clean_html(raw_html: str) -> str:
     """
     Remove HTML tags from a string.

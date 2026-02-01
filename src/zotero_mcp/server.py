@@ -25,7 +25,11 @@ from zotero_mcp.client import (
     get_attachment_details,
     get_zotero_client,
 )
-from zotero_mcp.utils import format_creators, clean_html
+from zotero_mcp.utils import (
+    clean_html,
+    format_creators,
+    is_semantic_search_enabled,
+)
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP):
@@ -33,30 +37,33 @@ async def server_lifespan(server: FastMCP):
     sys.stderr.write("Starting Zotero MCP server...\n")
 
     # Check for semantic search auto-update on startup
-    try:
-        from zotero_mcp.semantic_search import create_semantic_search
+    if not is_semantic_search_enabled():
+        sys.stderr.write("Semantic search disabled (ZOTERO_SEMANTIC_SEARCH=false)\n")
+    else:
+        try:
+            from zotero_mcp.semantic_search import create_semantic_search
 
-        config_path = Path.home() / ".config" / "zotero-mcp" / "config.json"
+            config_path = Path.home() / ".config" / "zotero-mcp" / "config.json"
 
-        if config_path.exists():
-            search = create_semantic_search(str(config_path))
+            if config_path.exists():
+                search = create_semantic_search(str(config_path))
 
-            if search.should_update_database():
-                sys.stderr.write("Auto-updating semantic search database...\n")
+                if search.should_update_database():
+                    sys.stderr.write("Auto-updating semantic search database...\n")
 
-                # Run update in background to avoid blocking server startup
-                async def background_update():
-                    try:
-                        stats = search.update_database(extract_fulltext=False)
-                        sys.stderr.write(f"Database update completed: {stats.get('processed_items', 0)} items processed\n")
-                    except Exception as e:
-                        sys.stderr.write(f"Background database update failed: {e}\n")
+                    # Run update in background to avoid blocking server startup
+                    async def background_update():
+                        try:
+                            stats = search.update_database(extract_fulltext=False)
+                            sys.stderr.write(f"Database update completed: {stats.get('processed_items', 0)} items processed\n")
+                        except Exception as e:
+                            sys.stderr.write(f"Background database update failed: {e}\n")
 
-                # Start background task
-                asyncio.create_task(background_update())
+                    # Start background task
+                    asyncio.create_task(background_update())
 
-    except Exception as e:
-        sys.stderr.write(f"Warning: Could not check semantic search auto-update: {e}\n")
+        except Exception as e:
+            sys.stderr.write(f"Warning: Could not check semantic search auto-update: {e}\n")
 
     yield {}
 
@@ -1724,6 +1731,9 @@ def semantic_search(
     Returns:
         Markdown-formatted search results with similarity scores
     """
+    if not is_semantic_search_enabled():
+        return "Error: Semantic search is disabled. Set ZOTERO_SEMANTIC_SEARCH=true to enable."
+
     try:
         if not query.strip():
             return "Error: Search query cannot be empty"
@@ -1858,6 +1868,9 @@ def update_search_database(
     Returns:
         Update status and statistics
     """
+    if not is_semantic_search_enabled():
+        return "Error: Semantic search is disabled. Set ZOTERO_SEMANTIC_SEARCH=true to enable."
+
     try:
         ctx.info("Starting semantic search database update...")
 
@@ -1918,6 +1931,9 @@ def get_search_database_status(*, ctx: Context) -> str:
     Returns:
         Database status information
     """
+    if not is_semantic_search_enabled():
+        return "Error: Semantic search is disabled. Set ZOTERO_SEMANTIC_SEARCH=true to enable."
+
     try:
         ctx.info("Getting semantic search database status...")
 
@@ -2472,6 +2488,9 @@ def chatgpt_connector_search(
     Returns a JSON-encoded string with shape {"results": [{"id","title","url"}, ...]}.
     The MCP runtime wraps this string as a single text content item.
     """
+    if not is_semantic_search_enabled():
+        return json.dumps({"results": [], "error": "Semantic search is disabled"})
+
     try:
         default_limit = 10
 
