@@ -41,6 +41,12 @@
 - Access Zotero's native annotations
 - Create and update notes and annotations
 
+### ✏️ Edit Your Library
+- Update item metadata (title, abstract, date, and other fields)
+- Batch add or remove tags across multiple items
+- Discover valid fields for any item type before editing
+- Create notes for items
+
 ### 🔄 Easy Updates
 - **Smart update system** that detects your installation method (uv, pip, conda, pipx)
 - **Configuration preservation** - all settings maintained during updates
@@ -199,6 +205,9 @@ Example prompts:
 - **"Find papers conceptually similar to deep learning in computer vision"** *(semantic search)*
 - **"Research that relates to the intersection of AI and healthcare"** *(semantic search)*
 - **"Papers that discuss topics similar to this abstract: [paste text]"** *(semantic search)*
+- "Update the title of this paper to 'New Title'"
+- "Add tag 'to-read' to all papers about machine learning"
+- "What fields can I edit for a journal article?"
 
 ### For Cherry Studio
 
@@ -324,6 +333,11 @@ The first time you use PDF annotation features, the necessary tools will be auto
 - `zotero_get_notes`: Retrieve notes from your Zotero library
 - `zotero_search_notes`: Search in notes and annotations (including PDF-extracted)
 - `zotero_create_note`: Create a new note for an item (beta feature)
+
+### ✏️ Metadata & Tag Tools
+- `zotero_update_item_metadata`: Update metadata fields of a Zotero item (title, abstract, date, etc.)
+- `zotero_get_item_type_fields`: Discover valid fields and creator types for a given item type
+- `zotero_batch_update_tags`: Batch add or remove tags across multiple items matching a search query
 
 ## 🔍 Troubleshooting
 
