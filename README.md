@@ -46,6 +46,8 @@
 - Batch add or remove tags across multiple items
 - Discover valid fields for any item type before editing
 - Create notes for items
+- Create, rename, and delete collections
+- Add or remove items from collections
 
 ### 🔄 Easy Updates
 - **Smart update system** that detects your installation method (uv, pip, conda, pipx)
@@ -338,6 +340,13 @@ The first time you use PDF annotation features, the necessary tools will be auto
 - `zotero_update_item_metadata`: Update metadata fields of a Zotero item (title, abstract, date, etc.)
 - `zotero_get_item_type_fields`: Discover valid fields and creator types for a given item type
 - `zotero_batch_update_tags`: Batch add or remove tags across multiple items matching a search query
+
+### 📂 Collection Management Tools
+- `zotero_create_collection`: Create a new collection, optionally nested under a parent
+- `zotero_update_collection`: Rename an existing collection
+- `zotero_delete_collection`: Delete a collection (items are not deleted from the library)
+- `zotero_add_items_to_collection`: Add one or more items to a collection
+- `zotero_remove_items_from_collection`: Remove items from a collection (items stay in the library)
 
 ## 🔍 Troubleshooting
 

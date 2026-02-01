@@ -2086,6 +2086,348 @@ def get_item_type_fields(
         ctx.error(f"Error fetching item type fields: {str(e)}")
         return f"Error fetching item type fields: {str(e)}"
 
+@mcp.tool(
+    name="zotero_create_collection",
+    description="Create a new collection in your Zotero library. "
+    "Optionally nest it under a parent collection."
+)
+def create_collection(
+    name: str,
+    parent_collection: str | None = None,
+    *,
+    ctx: Context
+) -> str:
+    """
+    Create a new collection in Zotero.
+
+    Args:
+        name: Name for the new collection
+        parent_collection: Key of parent collection (optional)
+        ctx: MCP context
+
+    Returns:
+        Success or error message
+    """
+    try:
+        if not name or not name.strip():
+            return "Error: Collection name cannot be empty"
+
+        ctx.info(f"Creating collection '{name}'")
+        zot = get_zotero_client()
+
+        if parent_collection:
+            try:
+                zot.collection(parent_collection)
+            except ResourceNotFoundError:
+                return (
+                    f"Error: Parent collection not found: "
+                    f"{parent_collection}"
+                )
+
+        payload: dict[str, Any] = {"name": name.strip()}
+        if parent_collection:
+            payload["parentCollection"] = parent_collection
+
+        result = zot.create_collections([payload])
+
+        if result and result.get("successful"):
+            collection_obj = list(result["successful"].values())[0]
+            key = collection_obj.get("key", "")
+            parent_info = ""
+            if parent_collection:
+                parent_info = (
+                    f"\n**Parent:** {parent_collection}"
+                )
+            return (
+                f"# Collection Created\n\n"
+                f"**Name:** {name.strip()}\n"
+                f"**Key:** {key}"
+                f"{parent_info}"
+            )
+
+        return f"Error: Failed to create collection. Response: {result}"
+
+    except Exception as e:
+        ctx.error(f"Error creating collection: {str(e)}")
+        return f"Error creating collection: {str(e)}"
+
+
+@mcp.tool(
+    name="zotero_update_collection",
+    description="Rename a collection in your Zotero library."
+)
+def update_collection(
+    collection_key: str,
+    name: str,
+    *,
+    ctx: Context
+) -> str:
+    """
+    Rename a Zotero collection.
+
+    Args:
+        collection_key: Key of the collection to rename
+        name: New name for the collection
+        ctx: MCP context
+
+    Returns:
+        Success or error message
+    """
+    try:
+        if not collection_key or not collection_key.strip():
+            return "Error: collection_key cannot be empty"
+        if not name or not name.strip():
+            return "Error: Collection name cannot be empty"
+
+        ctx.info(f"Updating collection {collection_key}")
+        zot = get_zotero_client()
+
+        try:
+            collection = zot.collection(collection_key)
+        except ResourceNotFoundError:
+            return f"Error: No collection found with key: {collection_key}"
+
+        old_name = collection["data"].get("name", "")
+        collection["data"]["name"] = name.strip()
+
+        zot.update_collection(collection)
+        return (
+            f"# Collection Updated\n\n"
+            f"**Key:** {collection_key}\n"
+            f"**Old Name:** {old_name}\n"
+            f"**New Name:** {name.strip()}"
+        )
+
+    except Exception as e:
+        ctx.error(f"Error updating collection: {str(e)}")
+        return f"Error updating collection: {str(e)}"
+
+
+@mcp.tool(
+    name="zotero_delete_collection",
+    description="Delete a collection from your Zotero library. "
+    "Items in the collection are NOT deleted from the library."
+)
+def delete_collection(
+    collection_key: str,
+    *,
+    ctx: Context
+) -> str:
+    """
+    Delete a Zotero collection.
+
+    Args:
+        collection_key: Key of the collection to delete
+        ctx: MCP context
+
+    Returns:
+        Success or error message
+    """
+    try:
+        if not collection_key or not collection_key.strip():
+            return "Error: collection_key cannot be empty"
+
+        ctx.info(f"Deleting collection {collection_key}")
+        zot = get_zotero_client()
+
+        try:
+            collection = zot.collection(collection_key)
+        except ResourceNotFoundError:
+            return f"Error: No collection found with key: {collection_key}"
+
+        collection_name = collection["data"].get("name", "")
+        zot.delete_collection(collection)
+        return (
+            f"# Collection Deleted\n\n"
+            f"**Name:** {collection_name}\n"
+            f"**Key:** {collection_key}\n\n"
+            f"Items in this collection were NOT deleted from "
+            f"the library."
+        )
+
+    except Exception as e:
+        ctx.error(f"Error deleting collection: {str(e)}")
+        return f"Error deleting collection: {str(e)}"
+
+
+@mcp.tool(
+    name="zotero_add_items_to_collection",
+    description="Add one or more items to a Zotero collection."
+)
+def add_items_to_collection(
+    collection_key: str,
+    item_keys: list[str] | str,
+    *,
+    ctx: Context
+) -> str:
+    """
+    Add items to a Zotero collection.
+
+    Args:
+        collection_key: Key of the target collection
+        item_keys: List of item keys to add (or JSON string)
+        ctx: MCP context
+
+    Returns:
+        Summary of added items
+    """
+    try:
+        if not collection_key or not collection_key.strip():
+            return "Error: collection_key cannot be empty"
+
+        if item_keys and isinstance(item_keys, str):
+            try:
+                item_keys = json.loads(item_keys)
+            except json.JSONDecodeError:
+                return (
+                    f"Error: item_keys appears to be malformed "
+                    f"JSON string: {item_keys}"
+                )
+
+        if not item_keys:
+            return "Error: item_keys cannot be empty"
+
+        ctx.info(
+            f"Adding {len(item_keys)} items to "
+            f"collection {collection_key}"
+        )
+        zot = get_zotero_client()
+
+        try:
+            zot.collection(collection_key)
+        except ResourceNotFoundError:
+            return (
+                f"Error: No collection found with key: "
+                f"{collection_key}"
+            )
+
+        added = []
+        failed = []
+        for key in item_keys:
+            try:
+                item = zot.item(key)
+                zot.addto_collection(collection_key, item)
+                added.append(key)
+            except ResourceNotFoundError:
+                failed.append(f"{key} (not found)")
+            except Exception as e:
+                failed.append(f"{key} ({e})")
+
+        output = [
+            "# Add Items to Collection\n",
+            f"**Collection:** {collection_key}",
+            f"**Added:** {len(added)}",
+            f"**Failed:** {len(failed)}",
+        ]
+
+        if added:
+            output.append("\n## Added")
+            for k in added:
+                output.append(f"- {k}")
+
+        if failed:
+            output.append("\n## Failed")
+            for entry in failed:
+                output.append(f"- {entry}")
+
+        return "\n".join(output)
+
+    except Exception as e:
+        ctx.error(f"Error adding items to collection: {str(e)}")
+        return f"Error adding items to collection: {str(e)}"
+
+
+@mcp.tool(
+    name="zotero_remove_items_from_collection",
+    description="Remove one or more items from a Zotero collection. "
+    "Items are NOT deleted from the library."
+)
+def remove_items_from_collection(
+    collection_key: str,
+    item_keys: list[str] | str,
+    *,
+    ctx: Context
+) -> str:
+    """
+    Remove items from a Zotero collection.
+
+    Args:
+        collection_key: Key of the collection
+        item_keys: List of item keys to remove (or JSON string)
+        ctx: MCP context
+
+    Returns:
+        Summary of removed items
+    """
+    try:
+        if not collection_key or not collection_key.strip():
+            return "Error: collection_key cannot be empty"
+
+        if item_keys and isinstance(item_keys, str):
+            try:
+                item_keys = json.loads(item_keys)
+            except json.JSONDecodeError:
+                return (
+                    f"Error: item_keys appears to be malformed "
+                    f"JSON string: {item_keys}"
+                )
+
+        if not item_keys:
+            return "Error: item_keys cannot be empty"
+
+        ctx.info(
+            f"Removing {len(item_keys)} items from "
+            f"collection {collection_key}"
+        )
+        zot = get_zotero_client()
+
+        try:
+            zot.collection(collection_key)
+        except ResourceNotFoundError:
+            return (
+                f"Error: No collection found with key: "
+                f"{collection_key}"
+            )
+
+        removed = []
+        failed = []
+        for key in item_keys:
+            try:
+                item = zot.item(key)
+                zot.deletefrom_collection(collection_key, item)
+                removed.append(key)
+            except ResourceNotFoundError:
+                failed.append(f"{key} (not found)")
+            except Exception as e:
+                failed.append(f"{key} ({e})")
+
+        output = [
+            "# Remove Items from Collection\n",
+            f"**Collection:** {collection_key}",
+            f"**Removed:** {len(removed)}",
+            f"**Failed:** {len(failed)}",
+        ]
+
+        if removed:
+            output.append("\n## Removed")
+            for k in removed:
+                output.append(f"- {k}")
+
+        if failed:
+            output.append("\n## Failed")
+            for entry in failed:
+                output.append(f"- {entry}")
+
+        return "\n".join(output)
+
+    except Exception as e:
+        ctx.error(
+            f"Error removing items from collection: {str(e)}"
+        )
+        return (
+            f"Error removing items from collection: {str(e)}"
+        )
+
 
 # --- Minimal wrappers for ChatGPT connectors ---
 # These are required for ChatGPT custom MCP servers via web "connectors"
