@@ -5,7 +5,7 @@ Note: ChatGPT requires specific tool names "search" and "fetch", and so they
 are defined and used and piped through to the main server tools. See bottom of file for details.
 """
 
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 import os
 import sys
 import uuid
@@ -16,8 +16,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastmcp import Context, FastMCP
-
 from zotero_mcp.client import (
+    InvalidItemFieldsError,
+    ResourceNotFoundError,
     convert_to_markdown,
     format_item_metadata,
     generate_bibtex,
@@ -1963,6 +1964,127 @@ def get_search_database_status(*, ctx: Context) -> str:
     except Exception as e:
         ctx.error(f"Error getting database status: {str(e)}")
         return f"Error getting database status: {str(e)}"
+
+
+@mcp.tool(
+    name="zotero_update_item_metadata",
+    description="Update metadata fields of a Zotero item. "
+    "Use zotero_get_item_type_fields to discover valid fields. "
+    "For tags use zotero_batch_update_tags instead."
+)
+def update_item_metadata(
+    item_key: str,
+    fields: dict[str, Any],
+    *,
+    ctx: Context
+) -> str:
+    """
+    Update metadata fields of a Zotero item.
+
+    Args:
+        item_key: Zotero item key/ID
+        fields: Dictionary of field names to new values
+        ctx: MCP context
+
+    Returns:
+        Success or error message
+    """
+    try:
+        if not item_key or not item_key.strip():
+            return "Error: item_key cannot be empty"
+        if not fields:
+            return "Error: fields cannot be empty"
+
+        protected = {
+            "itemType", "key", "version",
+            "dateAdded", "dateModified",
+            "tags", "collections", "relations",
+        }
+        bad = protected & fields.keys()
+        if bad:
+            return f"Error: Cannot update protected fields: {', '.join(sorted(bad))}"
+
+        ctx.info(f"Updating item {item_key} with fields: {list(fields.keys())}")
+        zot = get_zotero_client()
+
+        try:
+            item = zot.item(item_key)
+        except ResourceNotFoundError:
+            return f"Error: No item found with key: {item_key}"
+
+        item["data"].update(fields)
+
+        try:
+            result = zot.update_item(item)
+            ctx.info(f"Update result for {item_key}: {result}")
+        except InvalidItemFieldsError as e:
+            return f"Error: Invalid fields: {e}"
+
+        return (
+            f"Successfully updated item {item_key}. "
+            f"Fields changed: {', '.join(fields.keys())}"
+        )
+
+    except Exception as e:
+        ctx.error(f"Error updating item: {str(e)}")
+        return f"Error updating item: {str(e)}"
+
+
+@mcp.tool(
+    name="zotero_get_item_type_fields",
+    description="Get valid fields and creator types for a Zotero item type. Call this before updating an item to discover which fields are available."
+)
+def get_item_type_fields(
+    item_type: str,
+    *,
+    ctx: Context
+) -> str:
+    """
+    Get valid fields and creator types for a Zotero item type.
+
+    Args:
+        item_type: Zotero item type (e.g. "journalArticle", "book", "conferencePaper")
+        ctx: MCP context
+
+    Returns:
+        Markdown-formatted list of valid fields and creator types
+    """
+    try:
+        if not item_type or not item_type.strip():
+            return "Error: item_type cannot be empty"
+
+        ctx.info(f"Fetching fields for item type: {item_type}")
+        zot = get_zotero_client()
+
+        try:
+            type_fields = zot.item_type_fields(item_type)
+        except Exception as e:
+            return f"Error: Could not retrieve fields for item type '{item_type}': {e}"
+
+        try:
+            creator_types = zot.item_creator_types(item_type)
+        except Exception as e:
+            return f"Error: Could not retrieve creator types for item type '{item_type}': {e}"
+
+        output = [f"## Fields for {item_type}", ""]
+        for field_info in type_fields:
+            field = field_info.get("field", "")
+            localized = field_info.get("localized", "")
+            output.append(f"- {field} ({localized})")
+
+        output.append("")
+        output.append("## Creator types")
+        output.append("")
+        for creator_info in creator_types:
+            creator = creator_info.get("creatorType", "")
+            localized = creator_info.get("localized", "")
+            output.append(f"- {creator} ({localized})")
+
+        return "\n".join(output)
+
+    except Exception as e:
+        ctx.error(f"Error fetching item type fields: {str(e)}")
+        return f"Error fetching item type fields: {str(e)}"
 
 
 # --- Minimal wrappers for ChatGPT connectors ---

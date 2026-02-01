@@ -10,6 +10,10 @@ from typing import Any, Dict, List, Optional, Union
 from dotenv import load_dotenv
 from markitdown import MarkItDown
 from pyzotero import zotero
+from pyzotero.zotero_errors import (
+    InvalidItemFieldsError,
+    ResourceNotFoundError,
+)
 
 from zotero_mcp.utils import format_creators
 
